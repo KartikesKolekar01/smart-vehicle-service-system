@@ -7,6 +7,7 @@ import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -22,12 +23,13 @@ import java.util.List;
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
     private final JwtUtil jwtUtil;
-
-    // Public endpoints ज्यांना token नको
-    private static final List<String> PUBLIC_ENDPOINTS = List.of(
+       private static final List<String> PUBLIC_ENDPOINTS = List.of(
             "/api/auth/register",
             "/api/auth/login",
             "/api/auth/refresh",
+            "/api/auth/forgot-password",   // ✅ NEW
+            "/api/auth/reset-password",    // ✅ NEW
+            "/api/notifications/internal",
             "/actuator"
     );
 
@@ -36,16 +38,25 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
 
-        log.debug("Gateway filter: {}", path);
+        log.debug("Gateway filter: {} {}", request.getMethod(), path);
 
-        // 1. Public endpoints तपास
+        // 0. ⚠️ ALWAYS allow CORS preflight (OPTIONS)
+        if (request.getMethod() == HttpMethod.OPTIONS) {
+            log.debug("OPTIONS preflight — allowing: {}", path);
+            return chain.filter(exchange);
+        }
+        // 0. ⚠️ ALWAYS allow CORS preflight (OPTIONS)
+        if (request.getMethod().matches("OPTIONS")) {
+            return chain.filter(exchange);
+        }
+        // 1. Public endpoints
         boolean isPublic = PUBLIC_ENDPOINTS.stream().anyMatch(path::contains);
         if (isPublic) {
             log.debug("Public endpoint, allowing: {}", path);
             return chain.filter(exchange);
         }
 
-        // 2. Authorization header तपास
+        // 2. Authorization header
         if (!request.getHeaders().containsKey(HttpHeaders.AUTHORIZATION)) {
             log.warn("Missing Authorization header for: {}", path);
             return onError(exchange, "Missing Authorization Header", HttpStatus.UNAUTHORIZED);
@@ -64,7 +75,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             return onError(exchange, "Invalid or Expired Token", HttpStatus.UNAUTHORIZED);
         }
 
-        // 4. User info extract कर आणि header मध्ये add कर
+        // 4. Extract user info
         String email = jwtUtil.extractUsername(token);
         String role = jwtUtil.extractRole(token);
 
@@ -73,7 +84,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                 .header("X-User-Role", role)
                 .build();
 
-        log.info("Authenticated {} with role {} → {}", email, role, path);
+        log.info("Authenticated {} with role {} → {} {}", email, role, request.getMethod(), path);
 
         return chain.filter(exchange.mutate().request(mutatedRequest).build());
     }
@@ -90,6 +101,6 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return -1;  // सगळ्यांपेक्षा आधी चालावा
+        return -1;
     }
 }

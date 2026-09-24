@@ -10,7 +10,7 @@
         <module name="vehicle-service" />
         <module name="eureka-server" />
       </profile>
-      <profile name="Annotation profile for billing-service" enabled="true">
+      <profile name="Annotation profile for notification-service" enabled="true">
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
@@ -20,8 +20,8 @@
         <module name="auth-service" />
         <module name="mechanic-service" />
         <module name="appointment-service" />
-        <module name="spare-parts-service" />
         <module name="notification-service" />
+        <module name="spare-parts-service" />
         <module name="billing-service" />
       </profile>
     </annotationProcessing>

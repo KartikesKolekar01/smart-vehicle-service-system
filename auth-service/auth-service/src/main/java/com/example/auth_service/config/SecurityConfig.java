@@ -28,8 +28,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws Exception {
-        return authenticationConfiguration.getAuthenticationManager();
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
     }
 
     @Bean
@@ -37,23 +37,19 @@ public class SecurityConfig {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(AbstractHttpConfigurer::disable)
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Public endpoints
                         .requestMatchers(
                                 "/auth/register",
                                 "/auth/login",
                                 "/auth/refresh",
-                                "/actuator/health"
+                                "/auth/forgot-password",   // ✅ NEW
+                                "/auth/reset-password",    // ✅ NEW
+                                "/actuator/**"
                         ).permitAll()
-                        // Authenticated endpoints
-                        .requestMatchers("/auth/me").authenticated()
-                        // Role-based endpoints
-                        .requestMatchers("/auth/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/auth/manager/**").hasAnyRole("SERVICE_MANAGER", "ADMIN")
-                        .requestMatchers("/auth/mechanic/**").hasAnyRole("MECHANIC", "ADMIN")
                         .anyRequest().authenticated()
                 )
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

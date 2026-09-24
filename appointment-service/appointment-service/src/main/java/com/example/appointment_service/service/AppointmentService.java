@@ -1,6 +1,7 @@
 package com.example.appointment_service.service;
 
 import com.example.appointment_service.client.MechanicClient;
+import com.example.appointment_service.client.NotificationClient;
 import com.example.appointment_service.client.VehicleClient;
 import com.example.appointment_service.dto.request.AppointmentRequest;
 import com.example.appointment_service.dto.request.AssignMechanicRequest;
@@ -19,7 +20,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,16 +34,16 @@ public class AppointmentService {
     private final UserContext userContext;
     private final VehicleClient vehicleClient;
     private final MechanicClient mechanicClient;
+    private final NotificationClient notificationClient;
 
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
     // 1. BOOK APPOINTMENT (Customer)
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
     @Transactional
     public AppointmentResponse bookAppointment(AppointmentRequest request) {
         String customerEmail = userContext.getCurrentUserEmail();
         log.info("Booking appointment for customer: {}", customerEmail);
 
-        // Call Vehicle Service via Feign
         VehicleSummary vehicle;
         try {
             vehicle = vehicleClient.getVehicleById(request.getVehicleId());
@@ -49,7 +52,6 @@ public class AppointmentService {
             throw new ResourceNotFoundException("Vehicle not found with id: " + request.getVehicleId());
         }
 
-        // Create appointment
         Appointment appointment = new Appointment();
         appointment.setCustomerEmail(customerEmail);
         appointment.setVehicleId(request.getVehicleId());
@@ -63,12 +65,24 @@ public class AppointmentService {
 
         Appointment saved = appointmentRepository.save(appointment);
         log.info("Appointment booked: {}", saved.getId());
+
+        // ✅ Send notification
+        sendNotification(
+                customerEmail,
+                "Appointment Booked",
+                "Your service appointment for " + saved.getVehicleRegistrationNumber() +
+                        " has been booked on " + saved.getAppointmentDate() +
+                        " at " + saved.getTimeSlot(),
+                "APPOINTMENT_BOOKED",
+                saved.getId()
+        );
+
         return toResponse(saved);
     }
 
-    // ────────────────────────────────────────────────────────
-    // 2. GET MY APPOINTMENTS (Customer)
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
+    // 2. GET MY APPOINTMENTS
+    // ══════════════════════════════════════════════════════════
     public List<AppointmentSummaryResponse> getMyAppointments() {
         String customerEmail = userContext.getCurrentUserEmail();
 
@@ -82,9 +96,9 @@ public class AppointmentService {
                 .stream().map(this::toSummary).collect(Collectors.toList());
     }
 
-    // ────────────────────────────────────────────────────────
-    // 3. GET APPOINTMENT BY ID (Owner or Admin)
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
+    // 3. GET APPOINTMENT BY ID
+    // ══════════════════════════════════════════════════════════
     public AppointmentResponse getAppointmentById(Long id) {
         Appointment appointment = appointmentRepository.findByIdAndActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found: " + id));
@@ -96,9 +110,9 @@ public class AppointmentService {
         return toResponse(appointment);
     }
 
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
     // 4. GET APPOINTMENTS BY STATUS (Admin only)
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
     public List<AppointmentSummaryResponse> getByStatus(AppointmentStatus status) {
         if (!userContext.isAdmin()) {
             throw new UnauthorizedActionException("Only Admin can filter by status");
@@ -107,9 +121,9 @@ public class AppointmentService {
                 .stream().map(this::toSummary).collect(Collectors.toList());
     }
 
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
     // 5. UPDATE STATUS (Admin only)
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
     @Transactional
     public AppointmentResponse updateStatus(Long id, StatusUpdateRequest request) {
         if (!userContext.isAdmin()) {
@@ -124,26 +138,47 @@ public class AppointmentService {
             throw new InvalidOperationException("Cannot update a " + appointment.getStatus() + " appointment");
         }
 
+        AppointmentStatus oldStatus = appointment.getStatus();
         appointment.setStatus(request.getStatus());
         if (request.getAdminNotes() != null) appointment.setAdminNotes(request.getAdminNotes());
         if (request.getActualCost() != null) appointment.setActualCost(request.getActualCost());
 
         if (request.getStatus() == AppointmentStatus.COMPLETED) {
             appointment.setCompletedAt(LocalDateTime.now());
-            // Free up mechanic (call Mechanic Service)
-            if (appointment.getMechanicId() != null) {
-                log.info("Appointment completed — mechanic {} freed", appointment.getMechanicId());
-            }
         }
 
         Appointment updated = appointmentRepository.save(appointment);
-        log.info("Appointment {} status updated to {}", id, request.getStatus());
+        log.info("Appointment {} status updated from {} to {}", id, oldStatus, request.getStatus());
+
+        // ✅ Send notifications based on new status
+        if (request.getStatus() == AppointmentStatus.IN_PROGRESS) {
+            sendNotification(
+                    updated.getCustomerEmail(),
+                    "Service Started",
+                    "Work has started on your vehicle " + updated.getVehicleRegistrationNumber() +
+                            ". We'll notify you when it's done.",
+                    "SERVICE_STARTED",
+                    updated.getId()
+            );
+        }
+
+        if (request.getStatus() == AppointmentStatus.COMPLETED) {
+            sendNotification(
+                    updated.getCustomerEmail(),
+                    "Service Completed",
+                    "Your vehicle " + updated.getVehicleRegistrationNumber() +
+                            " service has been completed. Please check your bill.",
+                    "SERVICE_COMPLETED",
+                    updated.getId()
+            );
+        }
+
         return toResponse(updated);
     }
 
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
     // 6. ASSIGN MECHANIC (Admin only)
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
     @Transactional
     public AppointmentResponse assignMechanic(Long id, AssignMechanicRequest request) {
         if (!userContext.isAdmin()) {
@@ -158,7 +193,6 @@ public class AppointmentService {
             throw new InvalidOperationException("Cannot assign mechanic to a " + appointment.getStatus() + " appointment");
         }
 
-        // Call Mechanic Service via Feign
         MechanicSummary mechanic;
         try {
             mechanic = mechanicClient.getMechanicById(request.getMechanicId());
@@ -173,12 +207,23 @@ public class AppointmentService {
 
         Appointment updated = appointmentRepository.save(appointment);
         log.info("Mechanic {} assigned to appointment {}", mechanic.getId(), id);
+
+        // ✅ Send notification
+        sendNotification(
+                updated.getCustomerEmail(),
+                "Mechanic Assigned",
+                "Mechanic " + mechanic.getName() + " has been assigned to your appointment #" +
+                        updated.getId() + " for vehicle " + updated.getVehicleRegistrationNumber(),
+                "MECHANIC_ASSIGNED",
+                updated.getId()
+        );
+
         return toResponse(updated);
     }
 
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
     // 7. CANCEL APPOINTMENT (Owner or Admin)
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
     @Transactional
     public AppointmentResponse cancelAppointment(Long id) {
         Appointment appointment = appointmentRepository.findByIdAndActiveTrue(id)
@@ -201,18 +246,41 @@ public class AppointmentService {
         return toResponse(updated);
     }
 
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
     // 8. INTERNAL LOOKUP (for other services)
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
     public AppointmentResponse getAppointmentInternal(Long id) {
         Appointment appointment = appointmentRepository.findByIdAndActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment not found: " + id));
         return toResponse(appointment);
     }
 
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
+    // NOTIFICATION HELPER
+    // ══════════════════════════════════════════════════════════
+    private void sendNotification(String email, String title, String message,
+                                  String type, Long referenceId) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("recipientEmail", email);
+            payload.put("title", title);
+            payload.put("message", message);
+            payload.put("type", type);
+            payload.put("referenceId", referenceId);
+            payload.put("referenceType", "APPOINTMENT");
+            payload.put("channel", "IN_APP");
+
+            notificationClient.sendNotification(payload);
+            log.info("Notification sent: {} to {}", title, email);
+        } catch (Exception e) {
+            log.error("Failed to send notification: {}", e.getMessage());
+            // Don't throw — notification failure shouldn't break main flow
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════
     // HELPERS
-    // ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════
     private AppointmentResponse toResponse(Appointment a) {
         return new AppointmentResponse(
                 a.getId(),

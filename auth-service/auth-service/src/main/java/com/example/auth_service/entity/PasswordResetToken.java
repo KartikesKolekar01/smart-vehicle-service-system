@@ -1,6 +1,5 @@
 package com.example.auth_service.entity;
 
-
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -10,26 +9,27 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "users")
+@Table(name = "password_reset_tokens")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class User {
+public class PasswordResetToken {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(unique = true, nullable = false)
-    private String email;
+    @Column(nullable = false, unique = true, length = 100)
+    private String token;
+
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
+
+    @Column(name = "expiry_date", nullable = false)
+    private LocalDateTime expiryDate;
 
     @Column(nullable = false)
-    private String password;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Role role;
-    @Column(name = "refresh_token", columnDefinition = "TEXT")
-    private String refreshToken;
+    private Boolean used = false;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

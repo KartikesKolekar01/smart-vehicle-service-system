@@ -23,4 +23,25 @@ public class PaymentRequest {
     private PaymentMethod paymentMethod;
 
     private String notes;
+
+    // ══════════════════════════════════════════════════════════
+    // ✅ VALIDATION FIELDS — Customer must send these
+    // ══════════════════════════════════════════════════════════
+
+    /**
+     * Payment reference — Admin ने दिलेला (bill सोबत)
+     * Customer हा exact reference पाठवतो
+     */
+    private String paymentReference;
+
+    /**
+     * Transaction ID — Razorpay/UPI चा transaction ID
+     * Optional for mock payments
+     */
+    private String transactionId;
+
+    /**
+     * Payment gateway name — "RAZORPAY", "MOCK", "UPI", etc.
+     */
+    private String paymentGateway;
 }

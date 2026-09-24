@@ -1,6 +1,7 @@
 package com.example.auth_service.controller;
 
-
+import com.example.auth_service.dto.request.ForgotPasswordRequest;
+import com.example.auth_service.dto.request.ResetPasswordRequest;
 import com.example.auth_service.dto.request.LoginRequest;
 import com.example.auth_service.dto.request.RefreshTokenRequest;
 import com.example.auth_service.dto.request.RegisterRequest;
@@ -51,6 +52,30 @@ public class AuthController {
         String email = authentication.getName();
         UserProfileResponse profile = authService.getProfile(email);
         return ResponseEntity.ok(ApiResponse.success("Profile fetched", profile));
+    }
+
+    // ══════════════════════════════════════════════════════════
+// FORGOT PASSWORD
+// ══════════════════════════════════════════════════════════
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<String>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.ok(ApiResponse.success(
+                "Password reset instructions sent to your email"
+        ));
+    }
+
+    // ══════════════════════════════════════════════════════════
+// RESET PASSWORD
+// ══════════════════════════════════════════════════════════
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<String>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.success(
+                "Password reset successful. You can now login with your new password."
+        ));
     }
 
     // Test Admin Endpoint

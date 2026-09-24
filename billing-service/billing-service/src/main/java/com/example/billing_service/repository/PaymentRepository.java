@@ -22,4 +22,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     boolean existsByPaymentReference(String paymentReference);
 
     boolean existsByAppointmentIdAndActiveTrue(Long appointmentId);
+
+    // ✅ NEW: For transaction ID uniqueness check
+    boolean existsByTransactionId(String transactionId);
 }

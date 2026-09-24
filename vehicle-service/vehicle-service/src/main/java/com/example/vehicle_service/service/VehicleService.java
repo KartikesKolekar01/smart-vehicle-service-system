@@ -150,7 +150,7 @@ public class VehicleService {
     }
 
     // ──────────────────────────────────────────────────────────
-    // 6. SOFT DELETE VEHICLE
+    // 6. HARD DELETE VEHICLE
     // ──────────────────────────────────────────────────────────
     @Transactional
     public void deleteVehicle(Long id) {
@@ -162,11 +162,9 @@ public class VehicleService {
                         "Vehicle not found or you don't have permission: " + id
                 ));
 
-        vehicle.setActive(false);
-        vehicleRepository.save(vehicle);
-        log.info("Vehicle {} soft-deleted", id);
+        vehicleRepository.delete(vehicle);   // ✅ HARD DELETE
+        log.info("Vehicle {} permanently deleted", id);
     }
-
     // ──────────────────────────────────────────────────────────
     // 7. GET VEHICLES DUE FOR SERVICE
     // ──────────────────────────────────────────────────────────

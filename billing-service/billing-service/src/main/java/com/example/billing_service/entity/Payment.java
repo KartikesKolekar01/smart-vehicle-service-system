@@ -12,10 +12,16 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
         name = "payments",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_payment_reference",
-                columnNames = "payment_reference"
-        ),
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_payment_reference",
+                        columnNames = "payment_reference"
+                ),
+                @UniqueConstraint(
+                        name = "uk_transaction_id",
+                        columnNames = "transaction_id"
+                )
+        },
         indexes = {
                 @Index(name = "idx_customer_email", columnList = "customer_email"),
                 @Index(name = "idx_appointment_id", columnList = "appointment_id")
@@ -59,8 +65,17 @@ public class Payment {
     @Column(name = "payment_method", length = 20)
     private PaymentMethod paymentMethod;
 
-    @Column(name = "transaction_id", length = 100)
+    @Column(name = "transaction_id", length = 100, unique = true)
     private String transactionId;
+
+    @Column(name = "payment_gateway", length = 30)
+    private String paymentGateway;   // ✅ NEW: "RAZORPAY", "MOCK", etc.
+
+    @Column(name = "gateway_order_id", length = 100)
+    private String gatewayOrderId;   // ✅ NEW: Razorpay order ID
+
+    @Column(name = "gateway_signature", length = 255)
+    private String gatewaySignature; // ✅ NEW: Signature for audit
 
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
